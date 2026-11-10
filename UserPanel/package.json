@@ -1,0 +1,23 @@
+{
+  "name": "UserPanel",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "node clean-next.cjs && next build",
+    "build:hosting": "node clean-next.cjs && NODE_OPTIONS=--max-old-space-size=768 next build",
+    "build:vps": "node clean-next.cjs && NODE_OPTIONS=--max-old-space-size=4096 next build",
+    "start": "node start.cjs --port=3000 --host=127.1.9.238"
+  },
+  "dependencies": {
+    "next": "^15.2.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "typescript": "^5.5.3"
+  }
+}

@@ -1,0 +1,982 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserPanelRole {
+  student
+  teacher
+}
+
+enum UserStatus {
+  active
+  blocked
+}
+
+enum AuthPanel {
+  user
+  admin
+}
+
+enum AuthEventType {
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  LOGOUT
+  LOGOUT_ALL
+  REFRESH
+  REFRESH_REUSE
+  SESSION_REVOKED
+  PASSWORD_CHANGED
+  PASSWORD_RESET
+  PROFILE_UPDATED
+  ACCOUNT_CREATED
+  ACCOUNT_BLOCKED
+  ACCOUNT_UNBLOCKED
+  PAGE_VIEW
+}
+
+enum BlockType {
+  HERO
+  ABOUT
+  TARIFFS
+  RULES
+  FORM
+}
+
+enum LeadStatus {
+  NEW
+  IN_PROGRESS
+  DONE
+}
+
+enum TariffPaymentMode {
+  once
+  installments
+}
+
+enum UserTariffStatus {
+  active
+  scheduled
+  expired
+  cancelled
+}
+
+model User {
+  id                  Int                    @id @default(autoincrement()) @db.UnsignedInt
+  email               String                 @unique @db.VarChar(191)
+  passwordHash        String                 @map("password_hash") @db.VarChar(255)
+  name                String                 @db.VarChar(100)
+  firstName           String?                @map("first_name") @db.VarChar(80)
+  lastName            String?                @map("last_name") @db.VarChar(80)
+  middleName          String?                @map("middle_name") @db.VarChar(80)
+  birthDate           DateTime?              @map("birth_date") @db.Date
+  phone               String?                @db.VarChar(32)
+  avatarUrl           String?                @map("avatar_url") @db.VarChar(500)
+  userRole            UserPanelRole?         @map("user_role")
+  teacherId           Int?                   @map("teacher_id") @db.UnsignedInt
+  isSuperAdmin        Boolean                @default(false) @map("is_super_admin")
+  status              UserStatus             @default(active)
+  adminRoleId         Int?                   @map("admin_role_id") @db.UnsignedInt
+  activatedAt         DateTime?              @map("activated_at")
+  pendingPassword     String?                @map("pending_password") @db.VarChar(64)
+  createdAt           DateTime               @default(now()) @map("created_at")
+  updatedAt           DateTime               @updatedAt @map("updated_at")
+  adminRole           AdminRole?             @relation(fields: [adminRoleId], references: [id], onDelete: SetNull)
+  teacher             User?                  @relation("TeacherStudents", fields: [teacherId], references: [id], onDelete: SetNull)
+  students            User[]                 @relation("TeacherStudents")
+  sessions            AuthSession[]
+  events              AuthEvent[]
+  passwordResetTokens PasswordResetToken[]
+  tariffs             UserTariff[]
+  scheduleRules       ScheduleRule[]
+  studentLessons      Lesson[]               @relation("StudentLessons")
+  teacherLessons      Lesson[]               @relation("TeacherLessons")
+  mailingLogs         MailingLog[]
+  mailingTasks        MailingTask[]
+  teacherAccesses     TeacherContentAccess[] @relation("TeacherAccesses")
+  grantedAccesses     TeacherContentAccess[] @relation("GrantedAccesses")
+  teacherOwnLessons   TeacherLesson[]        @relation("TeacherOwnLessons")
+  teacherOwnUnits     TeacherUnit[]          @relation("TeacherOwnUnits")
+  testAccessGrants    TestAccessGrant[]
+  testAttempts        TestAttempt[]
+  testAttemptQuotas   TestAttemptQuota[]
+  testQuotasGranted   TestAttemptQuota[]     @relation("TestQuotaGrantedBy")
+  reviews             Review[]               @relation("UserReviews")
+  reviewsAboutTeacher Review[]               @relation("ReviewTeacher")
+
+  @@index([status])
+  @@index([adminRoleId])
+  @@index([teacherId])
+  @@map("users")
+}
+
+model PasswordResetToken {
+  id        Int       @id @default(autoincrement()) @db.UnsignedInt
+  userId    Int       @map("user_id") @db.UnsignedInt
+  tokenHash String    @unique @map("token_hash") @db.VarChar(64)
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt, usedAt])
+  @@map("password_reset_tokens")
+}
+
+model MailingLog {
+  id        Int      @id @default(autoincrement()) @db.UnsignedInt
+  type      String   @db.VarChar(40)
+  email     String   @db.VarChar(191)
+  userId    Int?     @map("user_id") @db.UnsignedInt
+  reason    String   @db.VarChar(255)
+  status    String   @db.VarChar(20)
+  error     String?  @db.VarChar(500)
+  errorRaw  String?  @map("error_raw") @db.Text
+  messageId String?  @map("message_id") @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([type])
+  @@index([email])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([messageId])
+  @@map("mailing_logs")
+}
+
+model MailingCronRun {
+  id         Int           @id @default(autoincrement()) @db.UnsignedInt
+  action     String        @db.VarChar(40)
+  status     String        @db.VarChar(20)
+  startedAt  DateTime      @map("started_at")
+  finishedAt DateTime?     @map("finished_at")
+  scanned    Int           @default(0)
+  enqueued   Int           @default(0)
+  cancelled  Int           @default(0)
+  claimed    Int           @default(0)
+  sent       Int           @default(0)
+  skipped    Int           @default(0)
+  failed     Int           @default(0)
+  overdue    Int           @default(0)
+  error      String?       @db.VarChar(500)
+  details    Json?
+  tasks      MailingTask[]
+
+  @@index([startedAt])
+  @@index([action, startedAt])
+  @@map("mailing_cron_runs")
+}
+
+model MailingTask {
+  id           Int             @id @default(autoincrement()) @db.UnsignedInt
+  kind         String          @db.VarChar(40)
+  mailingType  String          @map("mailing_type") @db.VarChar(40)
+  audience     String          @db.VarChar(20)
+  status       String          @db.VarChar(20)
+  scheduledAt  DateTime        @map("scheduled_at")
+  email        String          @db.VarChar(191)
+  userId       Int?            @map("user_id") @db.UnsignedInt
+  lessonId     Int?            @map("lesson_id") @db.UnsignedInt
+  cronRunId    Int?            @map("cron_run_id") @db.UnsignedInt
+  mailingLogId Int?            @map("mailing_log_id") @db.UnsignedInt
+  reason       String          @db.VarChar(255)
+  payload      Json
+  error        String?         @db.VarChar(500)
+  errorRaw     String?         @map("error_raw") @db.Text
+  claimedAt    DateTime?       @map("claimed_at")
+  processedAt  DateTime?       @map("processed_at")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+  user         User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  lesson       Lesson?         @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  cronRun      MailingCronRun? @relation(fields: [cronRunId], references: [id], onDelete: SetNull)
+
+  @@unique([kind, lessonId, userId])
+  @@index([status, scheduledAt])
+  @@index([kind, status])
+  @@index([email])
+  @@index([lessonId])
+  @@map("mailing_tasks")
+}
+
+model Permission {
+  id         Int                   @id @default(autoincrement()) @db.UnsignedInt
+  key        String                @unique @db.VarChar(64)
+  resource   String                @db.VarChar(32)
+  action     String                @db.VarChar(16)
+  label      String                @db.VarChar(100)
+  groupLabel String                @map("group_label") @db.VarChar(64)
+  adminRoles AdminRolePermission[]
+
+  @@map("permissions")
+}
+
+model AdminRole {
+  id          Int                   @id @default(autoincrement()) @db.UnsignedInt
+  name        String                @unique @db.VarChar(100)
+  slug        String                @unique @db.VarChar(64)
+  description String?               @db.VarChar(255)
+  isSystem    Boolean               @default(false) @map("is_system")
+  permissions AdminRolePermission[]
+  users       User[]
+
+  @@map("admin_roles")
+}
+
+model AdminRolePermission {
+  adminRoleId  Int        @map("admin_role_id") @db.UnsignedInt
+  permissionId Int        @map("permission_id") @db.UnsignedInt
+  adminRole    AdminRole  @relation(fields: [adminRoleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([adminRoleId, permissionId])
+  @@map("admin_role_permissions")
+}
+
+model AuthSession {
+  id               Int         @id @default(autoincrement()) @db.UnsignedInt
+  userId           Int         @map("user_id") @db.UnsignedInt
+  familyId         String      @map("family_id") @db.VarChar(36)
+  refreshTokenHash String      @unique @map("refresh_token_hash") @db.VarChar(64)
+  panel            AuthPanel
+  ip               String?     @db.VarChar(64)
+  userAgent        String?     @map("user_agent") @db.VarChar(320)
+  createdAt        DateTime    @default(now()) @map("created_at")
+  lastUsedAt       DateTime    @default(now()) @map("last_used_at")
+  expiresAt        DateTime    @map("expires_at")
+  revokedAt        DateTime?   @map("revoked_at")
+  revokedReason    String?     @map("revoked_reason") @db.VarChar(40)
+  replacedById     Int?        @map("replaced_by_id") @db.UnsignedInt
+  user             User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events           AuthEvent[]
+
+  @@index([userId, revokedAt])
+  @@index([familyId])
+  @@index([expiresAt])
+  @@map("auth_sessions")
+}
+
+model AuthEvent {
+  id        Int           @id @default(autoincrement()) @db.UnsignedInt
+  userId    Int?          @map("user_id") @db.UnsignedInt
+  sessionId Int?          @map("session_id") @db.UnsignedInt
+  type      AuthEventType
+  panel     AuthPanel?
+  path      String?       @db.VarChar(180)
+  ip        String?       @db.VarChar(64)
+  userAgent String?       @map("user_agent") @db.VarChar(320)
+  meta      Json?
+  createdAt DateTime      @default(now()) @map("created_at")
+  user      User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  session   AuthSession?  @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([userId, type, createdAt])
+  @@index([type, createdAt])
+  @@index([path, createdAt])
+  @@map("auth_events")
+}
+
+model Page {
+  id        Int           @id @default(autoincrement()) @db.UnsignedInt
+  slug      String        @unique @db.VarChar(120)
+  title     String        @db.VarChar(180)
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+  blocks    PageBlock[]
+  sections  PageSection[]
+  seo       PageSeo?
+
+  @@map("pages")
+}
+
+model PageSeo {
+  id          Int      @id @default(autoincrement()) @db.UnsignedInt
+  pageId      Int      @unique @map("page_id") @db.UnsignedInt
+  title       String?  @db.VarChar(180)
+  description String?  @db.VarChar(320)
+  keywords    String?  @db.VarChar(320)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  page        Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@map("page_seo")
+}
+
+model PageBlock {
+  id        Int       @id @default(autoincrement()) @db.UnsignedInt
+  pageId    Int       @map("page_id") @db.UnsignedInt
+  type      BlockType
+  sortOrder Int       @default(0) @map("sort_order")
+  content   Json
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  page      Page      @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@map("page_blocks")
+}
+
+model PageSection {
+  id        Int      @id @default(autoincrement()) @db.UnsignedInt
+  pageId    Int      @map("page_id") @db.UnsignedInt
+  blockId   Int      @map("block_id") @db.UnsignedInt
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  block     Block    @relation(fields: [blockId], references: [id], onDelete: Cascade)
+
+  @@unique([pageId, blockId])
+  @@index([pageId])
+  @@index([blockId])
+  @@map("page_sections")
+}
+
+model LeadCategory {
+  id        Int      @id @default(autoincrement()) @db.UnsignedInt
+  slug      String   @unique @db.VarChar(120)
+  title     String   @db.VarChar(180)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  leads     Lead[]
+
+  @@map("lead_categories")
+}
+
+model Lead {
+  id         Int           @id @default(autoincrement()) @db.UnsignedInt
+  name       String        @db.VarChar(100)
+  phone      String        @db.VarChar(32)
+  email      String?       @db.VarChar(191)
+  message    String?       @db.VarChar(500)
+  status     LeadStatus    @default(NEW)
+  location   String?       @db.VarChar(180)
+  categoryId Int?          @map("category_id") @db.UnsignedInt
+  createdAt  DateTime      @default(now()) @map("created_at")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
+  category   LeadCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([categoryId])
+  @@map("leads")
+}
+
+model AboutStatCategory {
+  id        Int         @id @default(autoincrement()) @db.UnsignedInt
+  slug      String      @unique @db.VarChar(120)
+  title     String      @db.VarChar(180)
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+  stats     AboutStat[]
+
+  @@map("about_stat_categories")
+}
+
+model AboutStat {
+  id         Int               @id @default(autoincrement()) @db.UnsignedInt
+  value      String            @db.VarChar(40)
+  label      String            @db.VarChar(120)
+  icon       String?           @db.Text
+  sortOrder  Int               @default(0) @map("sort_order")
+  categoryId Int               @map("category_id") @db.UnsignedInt
+  createdAt  DateTime          @default(now()) @map("created_at")
+  updatedAt  DateTime          @updatedAt @map("updated_at")
+  category   AboutStatCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@index([categoryId])
+  @@map("about_stats")
+}
+
+model Format {
+  id          Int      @id @default(autoincrement()) @db.UnsignedInt
+  title       String   @db.VarChar(120)
+  description String   @db.VarChar(320)
+  icon        String?  @db.Text
+  accent      Int      @default(1)
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("formats")
+}
+
+model Tariff {
+  id                    Int               @id @default(autoincrement()) @db.UnsignedInt
+  title                 String            @db.VarChar(120)
+  lessons               Int
+  price                 Int
+  oldPrice              Int?              @map("old_price")
+  popular               Boolean           @default(false)
+  note                  String            @db.VarChar(180)
+  variant               String            @default("start") @db.VarChar(16)
+  icon                  String?           @db.Text
+  lessonPrice           Int               @default(0) @map("lesson_price")
+  paymentMode           TariffPaymentMode @default(once) @map("payment_mode")
+  installmentCount      Int               @default(1) @map("installment_count")
+  durationMonths        Int               @default(1) @map("duration_months")
+  frozenLessonsPerMonth Int               @default(0) @map("frozen_lessons_per_month")
+  sortOrder             Int               @default(0) @map("sort_order")
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @updatedAt @map("updated_at")
+  subscriptions         UserTariff[]
+
+  @@map("tariffs")
+}
+
+model UserTariff {
+  id        Int                 @id @default(autoincrement()) @db.UnsignedInt
+  userId    Int                 @map("user_id") @db.UnsignedInt
+  tariffId  Int                 @map("tariff_id") @db.UnsignedInt
+  status    UserTariffStatus
+  startsAt  DateTime            @map("starts_at")
+  endsAt    DateTime            @map("ends_at")
+  createdAt DateTime            @default(now()) @map("created_at")
+  updatedAt DateTime            @updatedAt @map("updated_at")
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tariff    Tariff              @relation(fields: [tariffId], references: [id], onDelete: Restrict)
+  payments  UserTariffPayment[]
+  lessons   Lesson[]
+
+  @@index([userId, status])
+  @@index([endsAt])
+  @@map("user_tariffs")
+}
+
+model UserTariffPayment {
+  id           Int        @id @default(autoincrement()) @db.UnsignedInt
+  userTariffId Int        @map("user_tariff_id") @db.UnsignedInt
+  partNumber   Int        @map("part_number")
+  lessons      Int
+  amount       Int
+  paidAt       DateTime?  @map("paid_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  userTariff   UserTariff @relation(fields: [userTariffId], references: [id], onDelete: Cascade)
+  issued       Lesson[]
+
+  @@unique([userTariffId, partNumber])
+  @@map("user_tariff_payments")
+}
+
+enum LessonStatus {
+  unscheduled
+  proposed
+  confirmed
+  rescheduling
+  done
+  missed
+  admin_skip
+  frozen
+  cancelled
+}
+
+enum LessonActor {
+  teacher
+  student
+}
+
+model Lesson {
+  id              Int               @id @default(autoincrement()) @db.UnsignedInt
+  studentId       Int               @map("student_id") @db.UnsignedInt
+  teacherId       Int?              @map("teacher_id") @db.UnsignedInt
+  userTariffId    Int               @map("user_tariff_id") @db.UnsignedInt
+  paymentId       Int               @map("payment_id") @db.UnsignedInt
+  number          Int
+  status          LessonStatus      @default(unscheduled)
+  proposedBy      LessonActor?      @map("proposed_by")
+  startsAt        DateTime?         @map("starts_at")
+  endsAt          DateTime?         @map("ends_at")
+  /// Previous confirmed slot while status = rescheduling (restored on decline).
+  priorStartsAt   DateTime?         @map("prior_starts_at")
+  priorEndsAt     DateTime?         @map("prior_ends_at")
+  frozenAt        DateTime?         @map("frozen_at")
+  refundedAt      DateTime?         @map("refunded_at")
+  reminderSentAt  DateTime?         @map("reminder_sent_at")
+  contentLessonId Int?              @map("content_lesson_id") @db.UnsignedInt
+  teacherLessonId Int?              @map("teacher_lesson_id") @db.UnsignedInt
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  student         User              @relation("StudentLessons", fields: [studentId], references: [id], onDelete: Cascade)
+  teacher         User?             @relation("TeacherLessons", fields: [teacherId], references: [id], onDelete: SetNull)
+  userTariff      UserTariff        @relation(fields: [userTariffId], references: [id], onDelete: Cascade)
+  payment         UserTariffPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  mailingTasks    MailingTask[]
+  contentLesson   ContentLesson?    @relation(fields: [contentLessonId], references: [id], onDelete: SetNull)
+  teacherLesson   TeacherLesson?    @relation(fields: [teacherLessonId], references: [id], onDelete: SetNull)
+
+  @@unique([userTariffId, number])
+  @@index([studentId, status])
+  @@index([teacherId, status])
+  @@index([status, startsAt])
+  @@map("lessons")
+}
+
+model SchoolRule {
+  id          Int      @id @default(autoincrement()) @db.UnsignedInt
+  title       String   @db.VarChar(180)
+  description String   @db.VarChar(320)
+  accent      Int      @default(1)
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("school_rules")
+}
+
+model Faq {
+  id        Int      @id @default(autoincrement()) @db.UnsignedInt
+  question  String   @db.VarChar(220)
+  answer    String   @db.VarChar(600)
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("faqs")
+}
+
+enum ReviewKind {
+  manual
+  user
+}
+
+enum ReviewTarget {
+  school
+  teacher
+}
+
+model Review {
+  id         Int          @id @default(autoincrement()) @db.UnsignedInt
+  quote      String       @db.VarChar(400)
+  author     String       @db.VarChar(80)
+  result     String       @db.VarChar(80)
+  rating     Int          @default(5)
+  kind       ReviewKind   @default(manual)
+  target     ReviewTarget @default(school)
+  userId     Int?         @map("user_id") @db.UnsignedInt
+  teacherId  Int?         @map("teacher_id") @db.UnsignedInt
+  isVerified Boolean      @default(false) @map("is_verified")
+  sortOrder  Int          @default(0) @map("sort_order")
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+  user       User?        @relation("UserReviews", fields: [userId], references: [id], onDelete: SetNull)
+  teacher    User?        @relation("ReviewTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
+
+  @@index([kind])
+  @@index([isVerified])
+  @@index([userId])
+  @@map("reviews")
+}
+
+model IconGroup {
+  id        Int      @id @default(autoincrement()) @db.UnsignedInt
+  slug      String   @db.VarChar(120)
+  title     String   @db.VarChar(180)
+  type      String   @default("svg") @db.VarChar(16)
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  icons     Icon[]
+
+  @@unique([type, slug])
+  @@index([type])
+  @@map("icon_groups")
+}
+
+model Icon {
+  id           Int        @id @default(autoincrement()) @db.UnsignedInt
+  name         String     @db.VarChar(120)
+  slug         String     @unique @db.VarChar(120)
+  type         String     @default("svg") @db.VarChar(16)
+  svg          String?    @db.Text
+  url          String?    @db.VarChar(500)
+  alt          String?    @db.VarChar(255)
+  mime         String?    @db.VarChar(80)
+  sizeBytes    Int?       @map("size_bytes")
+  originalName String?    @map("original_name") @db.VarChar(255)
+  sortOrder    Int        @default(0) @map("sort_order")
+  groupId      Int?       @map("group_id") @db.UnsignedInt
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  group        IconGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  @@index([groupId])
+  @@index([type])
+  @@map("icons")
+}
+
+model Setting {
+  id        Int      @id @default(autoincrement()) @db.UnsignedInt
+  key       String   @unique @db.VarChar(80)
+  value     Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
+
+model Block {
+  id        Int           @id @default(autoincrement()) @db.UnsignedInt
+  type      String        @db.VarChar(40)
+  name      String        @db.VarChar(180)
+  plaque    String?       @db.VarChar(80)
+  title     String?       @db.Text
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+  meta      BlockMeta[]
+  sections  PageSection[]
+
+  @@index([type])
+  @@map("blocks")
+}
+
+model BlockMeta {
+  id      Int    @id @default(autoincrement()) @db.UnsignedInt
+  blockId Int    @map("block_id") @db.UnsignedInt
+  key     String @db.VarChar(80)
+  value   String @db.Text
+  block   Block  @relation(fields: [blockId], references: [id], onDelete: Cascade)
+
+  @@unique([blockId, key])
+  @@index([blockId])
+  @@map("blocks_meta")
+}
+
+enum ScheduleRuleKind {
+  work
+  busy
+}
+
+enum ScheduleRuleScope {
+  weekly
+  date
+  daily
+}
+
+// ─── Curriculum content ───────────────────────────────────────────────────────
+
+model ContentLevel {
+  id          Int             @id @default(autoincrement()) @db.UnsignedInt
+  code        String          @unique @db.VarChar(8)
+  title       String          @db.VarChar(100)
+  description String?         @db.VarChar(320)
+  sortOrder   Int             @default(0) @map("sort_order")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+  courses     ContentCourse[]
+
+  @@map("content_levels")
+}
+
+model ContentCourse {
+  id          Int           @id @default(autoincrement()) @db.UnsignedInt
+  levelId     Int?          @map("level_id") @db.UnsignedInt
+  title       String        @db.VarChar(180)
+  description String?       @db.VarChar(500)
+  sortOrder   Int           @default(0) @map("sort_order")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  level       ContentLevel? @relation(fields: [levelId], references: [id], onDelete: SetNull)
+  units       ContentUnit[]
+
+  @@index([levelId])
+  @@map("content_courses")
+}
+
+model ContentUnit {
+  id           Int             @id @default(autoincrement()) @db.UnsignedInt
+  courseId     Int?            @map("course_id") @db.UnsignedInt
+  title        String          @db.VarChar(180)
+  description  String?         @db.VarChar(500)
+  sortOrder    Int             @default(0) @map("sort_order")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+  course       ContentCourse?  @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  lessons      ContentLesson[]
+  teacherUnits TeacherUnit[]
+
+  @@index([courseId])
+  @@map("content_units")
+}
+
+model ContentLesson {
+  id               Int             @id @default(autoincrement()) @db.UnsignedInt
+  unitId           Int?            @map("unit_id") @db.UnsignedInt
+  title            String          @db.VarChar(220)
+  description      String?         @db.VarChar(500)
+  content          Json?
+  sortOrder        Int             @default(0) @map("sort_order")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+  unit             ContentUnit?    @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  teacherLessons   TeacherLesson[]
+  scheduledLessons Lesson[]
+  presentation     LessonPresentation?
+
+  @@index([unitId])
+  @@map("content_lessons")
+}
+
+enum ContentEntityType {
+  level
+  course
+  unit
+  lesson
+}
+
+enum TeacherAccessMode {
+  readonly
+  fork
+}
+
+model TeacherContentAccess {
+  id         Int               @id @default(autoincrement()) @db.UnsignedInt
+  teacherId  Int               @map("teacher_id") @db.UnsignedInt
+  entityType ContentEntityType @map("entity_type")
+  entityId   Int               @map("entity_id") @db.UnsignedInt
+  mode       TeacherAccessMode @default(readonly)
+  grantedBy  Int               @map("granted_by") @db.UnsignedInt
+  grantedAt  DateTime          @default(now()) @map("granted_at")
+  teacher    User              @relation("TeacherAccesses", fields: [teacherId], references: [id], onDelete: Cascade)
+  granter    User              @relation("GrantedAccesses", fields: [grantedBy], references: [id], onDelete: Cascade)
+
+  @@unique([teacherId, entityType, entityId])
+  @@index([teacherId])
+  @@index([entityType, entityId])
+  @@map("teacher_content_accesses")
+}
+
+model TeacherLesson {
+  id               Int                 @id @default(autoincrement()) @db.UnsignedInt
+  teacherId        Int                 @map("teacher_id") @db.UnsignedInt
+  sourceLessonId   Int?                @map("source_lesson_id") @db.UnsignedInt
+  title            String              @db.VarChar(220)
+  description      String?             @db.VarChar(500)
+  content          Json?
+  createdAt        DateTime            @default(now()) @map("created_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
+  teacher          User                @relation("TeacherOwnLessons", fields: [teacherId], references: [id], onDelete: Cascade)
+  sourceLesson     ContentLesson?      @relation(fields: [sourceLessonId], references: [id], onDelete: SetNull)
+  unitItems        TeacherUnitLesson[]
+  scheduledLessons Lesson[]
+  presentation     LessonPresentation?
+
+  @@index([teacherId])
+  @@index([sourceLessonId])
+  @@map("teacher_lessons")
+}
+
+model LessonPresentation {
+  id              Int            @id @default(autoincrement()) @db.UnsignedInt
+  contentLessonId Int?           @unique @map("content_lesson_id") @db.UnsignedInt
+  teacherLessonId Int?           @unique @map("teacher_lesson_id") @db.UnsignedInt
+  originalName    String         @map("original_name") @db.VarChar(255)
+  url             String         @db.VarChar(500)
+  mime            String         @db.VarChar(120)
+  sizeBytes       Int            @map("size_bytes") @db.UnsignedInt
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  contentLesson   ContentLesson? @relation(fields: [contentLessonId], references: [id], onDelete: Cascade)
+  teacherLesson   TeacherLesson? @relation(fields: [teacherLessonId], references: [id], onDelete: Cascade)
+
+  @@map("lesson_presentations")
+}
+
+model TeacherUnit {
+  id           Int                 @id @default(autoincrement()) @db.UnsignedInt
+  teacherId    Int                 @map("teacher_id") @db.UnsignedInt
+  sourceUnitId Int?                @map("source_unit_id") @db.UnsignedInt
+  title        String              @db.VarChar(180)
+  mode         TeacherAccessMode   @default(readonly)
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
+  teacher      User                @relation("TeacherOwnUnits", fields: [teacherId], references: [id], onDelete: Cascade)
+  sourceUnit   ContentUnit?        @relation(fields: [sourceUnitId], references: [id], onDelete: SetNull)
+  lessons      TeacherUnitLesson[]
+
+  @@index([teacherId])
+  @@index([sourceUnitId])
+  @@map("teacher_units")
+}
+
+model TeacherUnitLesson {
+  id            Int           @id @default(autoincrement()) @db.UnsignedInt
+  teacherUnitId Int           @map("teacher_unit_id") @db.UnsignedInt
+  lessonId      Int           @map("lesson_id") @db.UnsignedInt
+  sortOrder     Int           @default(0) @map("sort_order")
+  teacherUnit   TeacherUnit   @relation(fields: [teacherUnitId], references: [id], onDelete: Cascade)
+  lesson        TeacherLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([teacherUnitId, lessonId])
+  @@index([teacherUnitId])
+  @@map("teacher_unit_lessons")
+}
+
+// ─── End curriculum content ───────────────────────────────────────────────────
+
+// ─── Tests ────────────────────────────────────────────────────────────────────
+
+enum TestKind {
+  free
+  material
+}
+
+enum TestAccessDuration {
+  m1
+  m5
+  m15
+  h1
+  forever
+}
+
+enum TestAnswerKind {
+  choice
+  write_in
+}
+
+enum TestAttemptStatus {
+  in_progress
+  submitted
+  expired
+}
+
+model Test {
+  id             Int                @id @default(autoincrement()) @db.UnsignedInt
+  title          String             @db.VarChar(220)
+  description    String?            @db.VarChar(500)
+  kind           TestKind           @default(free)
+  entityType     ContentEntityType? @map("entity_type")
+  entityId       Int?               @map("entity_id") @db.UnsignedInt
+  accessDuration TestAccessDuration @default(forever) @map("access_duration")
+  entryPassword  String             @map("entry_password") @db.VarChar(64)
+  randomize      Boolean            @default(false)
+  maxAttempts    Int                @default(3) @map("max_attempts")
+  sortOrder      Int                @default(0) @map("sort_order")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+  questions      TestQuestion[]
+  accessGrants   TestAccessGrant[]
+  attempts       TestAttempt[]
+  attemptQuotas  TestAttemptQuota[]
+
+  @@index([kind])
+  @@index([entityType, entityId])
+  @@map("tests")
+}
+
+model TestQuestion {
+  id        Int                 @id @default(autoincrement()) @db.UnsignedInt
+  testId    Int                 @map("test_id") @db.UnsignedInt
+  prompt    String              @db.VarChar(1000)
+  sortOrder Int                 @default(0) @map("sort_order")
+  createdAt DateTime            @default(now()) @map("created_at")
+  updatedAt DateTime            @updatedAt @map("updated_at")
+  test      Test                @relation(fields: [testId], references: [id], onDelete: Cascade)
+  options   TestAnswerOption[]
+  answers   TestAttemptAnswer[]
+
+  @@index([testId])
+  @@map("test_questions")
+}
+
+model TestAnswerOption {
+  id         Int            @id @default(autoincrement()) @db.UnsignedInt
+  questionId Int            @map("question_id") @db.UnsignedInt
+  text       String         @db.VarChar(500)
+  kind       TestAnswerKind @default(choice)
+  isCorrect  Boolean        @default(false) @map("is_correct")
+  sortOrder  Int            @default(0) @map("sort_order")
+  createdAt  DateTime       @default(now()) @map("created_at")
+  updatedAt  DateTime       @updatedAt @map("updated_at")
+  question   TestQuestion   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+  @@map("test_answer_options")
+}
+
+model TestAccessGrant {
+  id        Int       @id @default(autoincrement()) @db.UnsignedInt
+  userId    Int       @map("user_id") @db.UnsignedInt
+  testId    Int       @map("test_id") @db.UnsignedInt
+  grantedAt DateTime  @default(now()) @map("granted_at")
+  expiresAt DateTime? @map("expires_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  test      Test      @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, testId])
+  @@index([testId])
+  @@index([expiresAt])
+  @@map("test_access_grants")
+}
+
+model TestAttemptQuota {
+  id            Int      @id @default(autoincrement()) @db.UnsignedInt
+  userId        Int      @map("user_id") @db.UnsignedInt
+  testId        Int      @map("test_id") @db.UnsignedInt
+  extraAttempts Int      @default(0) @map("extra_attempts")
+  grantedById   Int?     @map("granted_by_id") @db.UnsignedInt
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  test          Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+  grantedBy     User?    @relation("TestQuotaGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
+
+  @@unique([userId, testId])
+  @@index([testId])
+  @@map("test_attempt_quotas")
+}
+
+model TestAttempt {
+  id            Int                 @id @default(autoincrement()) @db.UnsignedInt
+  userId        Int                 @map("user_id") @db.UnsignedInt
+  testId        Int                 @map("test_id") @db.UnsignedInt
+  status        TestAttemptStatus   @default(in_progress)
+  score         Int?
+  orderSnapshot Json?               @map("order_snapshot")
+  startedAt     DateTime            @default(now()) @map("started_at")
+  submittedAt   DateTime?           @map("submitted_at")
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  test          Test                @relation(fields: [testId], references: [id], onDelete: Cascade)
+  answers       TestAttemptAnswer[]
+
+  @@index([testId])
+  @@index([userId])
+  @@index([status])
+  @@map("test_attempts")
+}
+
+model TestAttemptAnswer {
+  id                Int         @id @default(autoincrement()) @db.UnsignedInt
+  attemptId         Int         @map("attempt_id") @db.UnsignedInt
+  questionId        Int         @map("question_id") @db.UnsignedInt
+  selectedOptionIds Json        @default("[]") @map("selected_option_ids")
+  writtenText       String?     @map("written_text") @db.VarChar(500)
+  isCorrect         Boolean?    @map("is_correct")
+  attempt           TestAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question          TestQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+  @@map("test_attempt_answers")
+}
+
+// ─── End tests ────────────────────────────────────────────────────────────────
+
+model ScheduleRule {
+  id          Int               @id @default(autoincrement()) @db.UnsignedInt
+  userId      Int               @map("user_id") @db.UnsignedInt
+  kind        ScheduleRuleKind
+  scope       ScheduleRuleScope
+  weekday     Int?
+  date        DateTime?         @db.Date
+  startMinute Int               @map("start_minute")
+  endMinute   Int               @map("end_minute")
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("schedule_rules")
+}

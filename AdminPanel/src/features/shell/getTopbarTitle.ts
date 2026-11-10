@@ -1,0 +1,30 @@
+export function getTopbarTitle(pathname: string): string {
+  if (pathname === '/') return 'Дашборд';
+  if (pathname.startsWith('/pages')) return 'Сторінки';
+  if (pathname.startsWith('/leads')) return 'Заявки';
+  if (pathname.startsWith('/analytics')) return 'Аналітика';
+  if (pathname.startsWith('/users/activity')) return 'Аналітика';
+  if (pathname.startsWith('/users')) return 'Користувачі';
+  if (pathname.startsWith('/blocks')) return 'Блоки';
+  if (pathname.startsWith('/about-stats')) return 'Цифри';
+  if (pathname.startsWith('/formats')) return 'Формати';
+  if (pathname.startsWith('/tariffs')) return 'Тарифи';
+  if (pathname.startsWith('/rules')) return 'Правила';
+  if (pathname.startsWith('/faq')) return 'FAQ';
+  if (pathname.startsWith('/icons/groups')) return 'Групи медіа';
+  if (pathname.startsWith('/icons')) return 'Іконки';
+  if (pathname.startsWith('/images')) return 'Зображення';
+  if (pathname.startsWith('/videos')) return 'Відео';
+  if (pathname.startsWith('/settings')) return 'Налаштування';
+  if (pathname.startsWith('/reviews')) return 'Відгуки';
+  if (pathname.startsWith('/modules/mailings')) return 'Модулі · Розсилки';
+  if (pathname.startsWith('/materials/tests')) return 'Матеріали · Тести';
+  if (pathname.startsWith('/tests')) return 'Матеріали · Тести';
+  if (pathname.startsWith('/materials/access')) return 'Матеріали · Доступи';
+  if (pathname.startsWith('/materials/lessons')) return 'Матеріали · Уроки';
+  if (pathname.startsWith('/materials/units')) return 'Матеріали · Юніти';
+  if (pathname.startsWith('/materials/courses')) return 'Матеріали · Курси';
+  if (pathname.startsWith('/materials/levels')) return 'Матеріали · Рівні';
+  if (pathname.startsWith('/materials')) return 'Матеріали';
+  return 'EngDi';
+}

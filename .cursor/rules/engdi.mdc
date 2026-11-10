@@ -1,0 +1,12 @@
+﻿---
+description: EngDi monorepo context for Cursor agents
+alwaysApply: true
+---
+
+# EngDi
+
+Monorepo: `MainApi` (NestJS/Prisma), `AdminPanel` (Next.js), `UserPanel` (Next.js), docs in `docs/Project/`.
+
+Before non-trivial work, read `AGENTS.md` and the relevant file under `docs/Project/`.
+
+Never commit `.env`, secrets, `node_modules`, `uploads`, `.next`, or `dist`. Use `*/.env.example` only.
